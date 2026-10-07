@@ -138,7 +138,7 @@ func TestInvalidFiles(t *testing.T) {
 		err  string
 	}{
 		"not midi":      {[]byte("RIFF0000000000"), "not a valid MIDI file"},
-		"smpte":         {smf(0xE728), "SMPTE"},
+		"bad smpte":     {smf(0x8000), "SMPTE"},
 		"no status":     {smf(96, []byte{0x00, 60, 100}), "running status"},
 		"truncated vlq": {smf(96, []byte{0x81}), "unexpected end of file"},
 	}
@@ -177,5 +177,18 @@ func TestSkipsSystemMessages(t *testing.T) {
 	}))
 	if len(s.Events) != 1 || s.Events[0].Status != 0x90 || s.Events[0].Data1 != 60 {
 		t.Errorf("events = %+v, want a single note-on C4", s.Events)
+	}
+}
+
+func TestSMPTEDivision(t *testing.T) {
+	// 25 fps × 40 ticks per frame = 1 ms per tick; the tempo event is ignored.
+	s := load(t, smf(0xE728, []byte{
+		0x00, 0xFF, 0x51, 0x03, 0x0F, 0x42, 0x40,
+		0x00, 0x90, 60, 100,
+		0x87, 0x68, 0x80, 60, 0, // 1000 ticks
+		0x00, 0xFF, 0x2F, 0x00,
+	}))
+	if got := s.Events[1].Time; !approx(got, 1.0) {
+		t.Errorf("note-off at %v, want 1.0", got)
 	}
 }

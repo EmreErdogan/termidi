@@ -39,8 +39,20 @@ func LoadMIDI(path string) (*Song, error) {
 	hlen := binary.BigEndian.Uint32(b[4:8])
 	ntracks := int(binary.BigEndian.Uint16(b[10:12]))
 	division := binary.BigEndian.Uint16(b[12:14])
+	// secPerTick returns the length of one tick at the given tempo.
+	secPerTick := func(tempo float64) float64 { return tempo / 1e6 / float64(division) }
 	if division&0x8000 != 0 {
-		return nil, errors.New("SMPTE time division is not supported")
+		// SMPTE: high byte is -frames per second, low byte ticks per frame.
+		// Ticks have a fixed length; tempo events are ignored.
+		fps := float64(-int8(division >> 8))
+		if fps == 29 {
+			fps = 29.97 // drop-frame
+		}
+		tpf := float64(division & 0xFF)
+		if fps <= 0 || tpf == 0 {
+			return nil, errors.New("invalid SMPTE time division")
+		}
+		secPerTick = func(float64) float64 { return 1 / (fps * tpf) }
 	}
 	pos := 8 + int(hlen)
 
@@ -77,7 +89,7 @@ func LoadMIDI(path string) (*Song, error) {
 	var lastTick uint64
 	var sec float64
 	for _, r := range raws {
-		sec += float64(r.tick-lastTick) * tempo / 1e6 / float64(division)
+		sec += float64(r.tick-lastTick) * secPerTick(tempo)
 		lastTick = r.tick
 		if r.tempo > 0 {
 			tempo = float64(r.tempo)
