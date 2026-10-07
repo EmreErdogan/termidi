@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 - Sustain pedal (CC64): notes keep ringing until the pedal is released.
 
+### Fixed
+- No more clicks when more than 64 notes sound at once: the oldest voice fades out instead of being cut.
+- Envelope timing is defined in seconds, so it no longer depends on the sample rate.
+
 ## [0.1.0] - 2026-10-07
 
 ### Added

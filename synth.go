@@ -7,7 +7,22 @@ import (
 	"sync"
 )
 
-const sampleRate = 44100
+const (
+	sampleRate = 44100
+	maxVoices  = 64
+
+	// Envelope time constants in seconds (time to fall to 1/e).
+	decayTau   = 0.75  // held notes sag toward the sustain level
+	releaseTau = 0.045 // after note-off
+	stealTau   = 0.004 // voice stolen at the polyphony limit
+)
+
+// Per-sample multipliers for the exponential envelopes above.
+var (
+	decayMul   = math.Exp(-1 / (sampleRate * decayTau))
+	releaseMul = math.Exp(-1 / (sampleRate * releaseTau))
+	stealMul   = math.Exp(-1 / (sampleRate * stealTau))
+)
 
 type voice struct {
 	ch, note byte
@@ -17,6 +32,8 @@ type voice struct {
 	env      float64
 	released bool
 	held     bool // note-off arrived while the sustain pedal was down
+	stolen   bool // fading out quickly to make room for a new note
+	gain     float64
 	drum     bool
 	wave     int
 	age      float64
@@ -127,7 +144,7 @@ func noteFreq(n byte, bend float64) float64 {
 
 func (p *Player) noteOn(ch, note, vel byte) {
 	c := &p.chans[ch]
-	v := &voice{ch: ch, note: note, amp: float64(vel) / 127 * c.volume, drum: ch == 9}
+	v := &voice{ch: ch, note: note, gain: 1, amp: float64(vel) / 127 * c.volume, drum: ch == 9}
 	if !v.drum {
 		v.freq = noteFreq(note, c.pitch)
 		// Pick a rough timbre from the GM program family.
@@ -142,13 +159,45 @@ func (p *Player) noteOn(ch, note, vel byte) {
 			v.wave = 1
 		}
 	}
-	if len(p.voices) > 64 {
-		p.voices = p.voices[1:]
-	}
+	p.steal()
 	p.voices = append(p.voices, v)
 }
 
+// steal makes room for one more voice when the polyphony limit is reached.
+// Rather than cutting a voice off (which clicks), it fades one out over a few
+// milliseconds, preferring the oldest already-released voice.
+func (p *Player) steal() {
+	var oldest, oldestReleased *voice
+	active := 0
+	for _, v := range p.voices {
+		if v.stolen {
+			continue
+		}
+		active++
+		if oldest == nil {
+			oldest = v
+		}
+		if oldestReleased == nil && v.released {
+			oldestReleased = v
+		}
+	}
+	if active < maxVoices {
+		return
+	}
+	if oldestReleased != nil {
+		oldest = oldestReleased
+	}
+	oldest.stolen = true
+}
+
 func (v *voice) sample() float64 {
+	if v.stolen {
+		v.gain *= stealMul
+	}
+	return v.render() * v.gain
+}
+
+func (v *voice) render() float64 {
 	dt := 1.0 / sampleRate
 	v.age += dt
 	if v.drum {
@@ -166,11 +215,11 @@ func (v *voice) sample() float64 {
 		return (rand.Float64()*2 - 1) * v.env * v.amp * 0.4
 	}
 	if v.released {
-		v.env *= 0.9995
+		v.env *= releaseMul
 	} else if v.age < 0.01 {
 		v.env = v.age / 0.01
 	} else {
-		v.env = math.Max(0.6, v.env*0.99997)
+		v.env = math.Max(0.6, v.env*decayMul)
 	}
 	v.phase += v.freq * dt
 	v.phase -= math.Floor(v.phase)
@@ -191,6 +240,9 @@ func (v *voice) sample() float64 {
 }
 
 func (v *voice) dead() bool {
+	if v.gain < 0.001 {
+		return true
+	}
 	if v.drum {
 		return v.age > 0.05 && v.env < 0.001
 	}

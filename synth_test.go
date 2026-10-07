@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestSustainPedal(t *testing.T) {
 	p := NewPlayer(&Song{})
@@ -44,5 +47,46 @@ func TestSeekRestoresSustain(t *testing.T) {
 	p.Seek(1.8)
 	if p.chans[0].sustain {
 		t.Error("sustain still on after seeking past pedal up")
+	}
+}
+
+func TestStealingFadesInsteadOfCutting(t *testing.T) {
+	p := NewPlayer(&Song{})
+	for n := range byte(maxVoices) {
+		p.apply(Event{Status: 0x90, Data1: n, Data2: 100})
+	}
+	p.apply(Event{Status: 0x80, Data1: 10}) // released voices are stolen first
+	first, released := p.voices[0], p.voices[10]
+	p.apply(Event{Status: 0x90, Data1: 100, Data2: 100})
+
+	if len(p.voices) != maxVoices+1 {
+		t.Fatalf("got %d voices, want %d (stolen voice kept while fading)", len(p.voices), maxVoices+1)
+	}
+	if !released.stolen || first.stolen {
+		t.Fatalf("stolen: released=%v first=%v, want the released voice stolen", released.stolen, first.stolen)
+	}
+
+	// The stolen voice must fade smoothly and be gone within ~50 ms.
+	prev := released.gain
+	for range sampleRate / 20 {
+		released.sample()
+		if released.gain > prev {
+			t.Fatal("gain increased while fading")
+		}
+		prev = released.gain
+	}
+	if !released.dead() {
+		t.Errorf("stolen voice still alive after 50 ms (gain %v)", released.gain)
+	}
+}
+
+func TestEnvelopeIsSampleRateIndependent(t *testing.T) {
+	// After releaseTau seconds a released note should be at 1/e of its level.
+	v := &voice{freq: 440, amp: 1, gain: 1, env: 1, released: true}
+	for range int(math.Round(sampleRate * releaseTau)) {
+		v.render()
+	}
+	if got, want := v.env, math.Exp(-1); math.Abs(got-want) > 0.01 {
+		t.Errorf("env after releaseTau = %v, want ≈ %v", got, want)
 	}
 }
