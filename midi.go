@@ -130,6 +130,8 @@ func parseTrack(d []byte, order *int) ([]rawEvent, error) {
 		}
 		switch {
 		case st == 0xFF:
+			// The spec says meta and sysex events cancel running status, but
+			// keeping it is harmless for valid files and lets sloppy ones play.
 			if i >= len(d) {
 				return out, nil
 			}
@@ -157,6 +159,15 @@ func parseTrack(d []byte, order *int) ([]rawEvent, error) {
 				return nil, err
 			}
 			i += int(l)
+		case st > 0xF0:
+			// System common/real-time messages don't belong in a file; skip
+			// them along with their data bytes.
+			switch st {
+			case 0xF1, 0xF3:
+				i++
+			case 0xF2:
+				i += 2
+			}
 		default:
 			running = st
 			n := 2

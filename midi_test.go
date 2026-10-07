@@ -153,3 +153,29 @@ func TestInvalidFiles(t *testing.T) {
 		})
 	}
 }
+
+func TestRunningStatusSurvivesMeta(t *testing.T) {
+	// Technically invalid, but common in the wild: keep playing.
+	s := load(t, smf(96, []byte{
+		0x00, 0x90, 60, 100,
+		0x00, 0xFF, 0x01, 0x01, 'x', // text meta
+		0x00, 62, 100, // running status note-on
+		0x00, 0xFF, 0x2F, 0x00,
+	}))
+	if len(s.Events) != 2 || s.Events[1].Status != 0x90 || s.Events[1].Data1 != 62 {
+		t.Errorf("events = %+v, want two note-ons", s.Events)
+	}
+}
+
+func TestSkipsSystemMessages(t *testing.T) {
+	s := load(t, smf(96, []byte{
+		0x00, 0xF2, 0x10, 0x20, // song position pointer
+		0x00, 0xF8, // timing clock
+		0x00, 0xF3, 0x01, // song select
+		0x00, 0x90, 60, 100,
+		0x00, 0xFF, 0x2F, 0x00,
+	}))
+	if len(s.Events) != 1 || s.Events[0].Status != 0x90 || s.Events[0].Data1 != 60 {
+		t.Errorf("events = %+v, want a single note-on C4", s.Events)
+	}
+}
