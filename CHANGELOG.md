@@ -4,12 +4,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-07
+
 ### Added
 - Stereo output with pan (CC10).
 - Expression (CC11).
+- Pitch bend range is read from RPN 0 instead of being fixed at ±2 semitones.
 
 ### Fixed
 - Volume (CC7) changes now apply to notes that are already sounding.
+- System messages (0xF1–0xFE) inside a track no longer corrupt the following events.
 
 ## [0.2.0] - 2026-10-07
 
