@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"math"
 	"testing"
 )
@@ -88,5 +89,49 @@ func TestEnvelopeIsSampleRateIndependent(t *testing.T) {
 	}
 	if got, want := v.env, math.Exp(-1); math.Abs(got-want) > 0.01 {
 		t.Errorf("env after releaseTau = %v, want ≈ %v", got, want)
+	}
+}
+
+// peak renders d seconds of p and returns the peak level on each side.
+func peak(p *Player, d float64) (l, r float64) {
+	buf := make([]byte, int(d*sampleRate)*8)
+	p.Read(buf)
+	for i := 0; i < len(buf); i += 8 {
+		l = max(l, math.Abs(float64(math.Float32frombits(binary.LittleEndian.Uint32(buf[i:])))))
+		r = max(r, math.Abs(float64(math.Float32frombits(binary.LittleEndian.Uint32(buf[i+4:])))))
+	}
+	return l, r
+}
+
+func noteWithCC(cc ...Event) *Player {
+	evs := append(cc, Event{Status: 0x90, Data1: 69, Data2: 127})
+	return NewPlayer(&Song{Duration: 1, Events: evs})
+}
+
+func TestPan(t *testing.T) {
+	l, r := peak(noteWithCC(), 0.1)
+	if math.Abs(l-r) > 1e-6 || l == 0 {
+		t.Errorf("center: l=%v r=%v, want equal and non-zero", l, r)
+	}
+	l, r = peak(noteWithCC(Event{Status: 0xB0, Data1: 10, Data2: 0}), 0.1)
+	if r > 1e-6 || l == 0 {
+		t.Errorf("hard left: l=%v r=%v, want only left", l, r)
+	}
+	l, r = peak(noteWithCC(Event{Status: 0xB0, Data1: 10, Data2: 127}), 0.1)
+	if l > 1e-6 || r == 0 {
+		t.Errorf("hard right: l=%v r=%v, want only right", l, r)
+	}
+}
+
+func TestExpressionAndVolumeAffectSoundingNotes(t *testing.T) {
+	for _, cc := range []byte{7, 11} {
+		p := noteWithCC()
+		before, _ := peak(p, 0.1)
+		p.apply(Event{Status: 0xB0, Data1: cc, Data2: 0})
+		p.voices[0].env = 1 // keep the envelope from masking the change
+		after, _ := peak(p, 0.01)
+		if before == 0 || after > 1e-6 {
+			t.Errorf("CC%d=0 on a sounding note: before=%v after=%v, want silence", cc, before, after)
+		}
 	}
 }

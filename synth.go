@@ -40,10 +40,29 @@ type voice struct {
 }
 
 type channel struct {
-	program byte
-	volume  float64
-	pitch   float64 // semitones
-	sustain bool
+	program    byte
+	volume     float64 // CC7
+	expression float64 // CC11
+	pan        float64 // CC10, -1 (left) .. +1 (right)
+	pitch      float64 // semitones
+	sustain    bool
+	// Output gains derived from volume, expression and pan.
+	gainL, gainR float64
+}
+
+func newChannel() channel {
+	c := channel{volume: 100.0 / 127, expression: 1}
+	c.updateGain()
+	return c
+}
+
+// updateGain recomputes the per-side gains. Equal-power panning, scaled so a
+// centered channel plays at unity on both sides.
+func (c *channel) updateGain() {
+	theta := (c.pan + 1) * math.Pi / 4
+	g := c.volume * c.expression * math.Sqrt2
+	c.gainL = g * math.Cos(theta)
+	c.gainR = g * math.Sin(theta)
 }
 
 // Player is an io.Reader that renders the song as float32 stereo PCM.
@@ -61,7 +80,7 @@ type Player struct {
 func NewPlayer(s *Song) *Player {
 	p := &Player{song: s}
 	for i := range p.chans {
-		p.chans[i].volume = 100.0 / 127
+		p.chans[i] = newChannel()
 	}
 	return p
 }
@@ -108,6 +127,13 @@ func (p *Player) apply(e Event) {
 		switch e.Data1 {
 		case 7:
 			c.volume = float64(e.Data2) / 127
+			c.updateGain()
+		case 10:
+			c.pan = max(-1, float64(int(e.Data2)-64)/63)
+			c.updateGain()
+		case 11:
+			c.expression = float64(e.Data2) / 127
+			c.updateGain()
 		case 64:
 			c.sustain = e.Data2 >= 64
 			if !c.sustain {
@@ -144,7 +170,7 @@ func noteFreq(n byte, bend float64) float64 {
 
 func (p *Player) noteOn(ch, note, vel byte) {
 	c := &p.chans[ch]
-	v := &voice{ch: ch, note: note, gain: 1, amp: float64(vel) / 127 * c.volume, drum: ch == 9}
+	v := &voice{ch: ch, note: note, gain: 1, amp: float64(vel) / 127, drum: ch == 9}
 	if !v.drum {
 		v.freq = noteFreq(note, c.pitch)
 		// Pick a rough timbre from the GM program family.
@@ -254,7 +280,7 @@ func (p *Player) Read(buf []byte) (int, error) {
 	defer p.mu.Unlock()
 	frames := len(buf) / 8
 	for f := 0; f < frames; f++ {
-		var s float64
+		var l, r float64
 		if !p.Paused && !p.Done {
 			for p.next < len(p.song.Events) && p.song.Events[p.next].Time <= p.t {
 				p.apply(p.song.Events[p.next])
@@ -262,7 +288,10 @@ func (p *Player) Read(buf []byte) (int, error) {
 			}
 			alive := p.voices[:0]
 			for _, v := range p.voices {
-				s += v.sample()
+				s := v.sample()
+				c := &p.chans[v.ch]
+				l += s * c.gainL
+				r += s * c.gainR
 				if !v.dead() {
 					alive = append(alive, v)
 				}
@@ -273,10 +302,9 @@ func (p *Player) Read(buf []byte) (int, error) {
 				p.Done = true
 			}
 		}
-		s = math.Tanh(s * 0.35) // soft clip for polyphony
-		bits := math.Float32bits(float32(s))
-		binary.LittleEndian.PutUint32(buf[f*8:], bits)
-		binary.LittleEndian.PutUint32(buf[f*8+4:], bits)
+		// Soft clip for polyphony.
+		binary.LittleEndian.PutUint32(buf[f*8:], math.Float32bits(float32(math.Tanh(l*0.35))))
+		binary.LittleEndian.PutUint32(buf[f*8+4:], math.Float32bits(float32(math.Tanh(r*0.35))))
 	}
 	return frames * 8, nil
 }
@@ -289,7 +317,7 @@ func (p *Player) Seek(t float64) {
 	t = math.Max(0, math.Min(t, p.song.Duration))
 	p.voices = nil
 	for i := range p.chans {
-		p.chans[i] = channel{volume: 100.0 / 127}
+		p.chans[i] = newChannel()
 	}
 	p.next = 0
 	for p.next < len(p.song.Events) && p.song.Events[p.next].Time < t {
