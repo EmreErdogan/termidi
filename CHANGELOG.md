@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Master volume (↑/↓) and playback speed (+/-), shown in the status line.
 - Playlists: pass several files or folders; `n`/`p` jump to the next/previous song. Files that fail to load are skipped with a warning.
 - SMPTE time division (files timed in frames instead of beats).
+- Windows support (amd64, arm64) with a PowerShell installer; `update` works on Windows too.
 
 ## [0.3.0] - 2026-10-07
 

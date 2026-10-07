@@ -23,7 +23,18 @@ const (
 )
 
 func assetName() string {
-	return fmt.Sprintf("%s-%s-%s", appName, runtime.GOOS, runtime.GOARCH)
+	name := fmt.Sprintf("%s-%s-%s", appName, runtime.GOOS, runtime.GOARCH)
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return name
+}
+
+// cleanupOldBinary removes the binary left behind by a Windows update.
+func cleanupOldBinary() {
+	if exe, err := os.Executable(); err == nil {
+		os.Remove(exe + ".old")
+	}
 }
 
 // runUpdate replaces the running binary with the latest GitHub release.
@@ -91,6 +102,13 @@ func runUpdate() error {
 	}
 	if err := os.Chmod(tmp.Name(), 0o755); err != nil {
 		return err
+	}
+	// Windows can't overwrite a running executable, but it can rename it.
+	if runtime.GOOS == "windows" {
+		os.Remove(exe + ".old")
+		if err := os.Rename(exe, exe+".old"); err != nil {
+			return err
+		}
 	}
 	if err := os.Rename(tmp.Name(), exe); err != nil {
 		return err

@@ -13,6 +13,7 @@ import (
 )
 
 func main() {
+	cleanupOldBinary()
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, errUsage)
 		os.Exit(1)

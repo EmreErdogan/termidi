@@ -10,7 +10,15 @@ curl -fsSL https://raw.githubusercontent.com/EmreErdogan/termidi/main/install.sh
 
 The binary is installed to `~/.local/bin` (override with `INSTALL_DIR=/path`). If that directory is not on your `PATH`, it is added to your shell config automatically.
 
-Supported platforms: macOS and Linux (amd64, arm64).
+On Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/EmreErdogan/termidi/main/install.ps1 | iex
+```
+
+This installs to `%LOCALAPPDATA%\Programs\termidi` and adds it to your user `PATH`.
+
+Supported platforms: macOS, Linux and Windows (amd64, arm64).
 
 ## Usage
 

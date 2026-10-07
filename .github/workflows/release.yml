@@ -17,6 +17,8 @@ jobs:
           - { runner: macos-latest, goos: darwin, goarch: amd64 }
           - { runner: ubuntu-latest, goos: linux, goarch: amd64 }
           - { runner: ubuntu-24.04-arm, goos: linux, goarch: arm64 }
+          - { runner: windows-latest, goos: windows, goarch: amd64, ext: .exe }
+          - { runner: windows-11-arm, goos: windows, goarch: arm64, ext: .exe }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
@@ -26,14 +28,19 @@ jobs:
       - if: matrix.goos == 'linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
       - name: build
+        shell: bash
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o termidi-${GOOS}-${GOARCH} .
+        run: go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o termidi-${GOOS}-${GOARCH}${{ matrix.ext }} .
+      - name: smoke test
+        if: matrix.goos != 'darwin' || matrix.goarch == 'arm64' # macos-latest is arm64
+        shell: bash
+        run: ./termidi-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} version
       - uses: actions/upload-artifact@v7
         with:
           name: termidi-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: termidi-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: termidi-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
