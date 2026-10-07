@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 - Live view: a level meter per channel (with instrument family) and a keyboard that lights up sounding notes in channel colors. Set `NO_COLOR` to disable colors.
 - Master volume (↑/↓) and playback speed (+/-), shown in the status line.
+- Playlists: pass several files or folders; `n`/`p` jump to the next/previous song. Files that fail to load are skipped with a warning.
 
 ## [0.3.0] - 2026-10-07
 

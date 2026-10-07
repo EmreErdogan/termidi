@@ -193,3 +193,18 @@ func TestSpeedAndVolume(t *testing.T) {
 		t.Errorf("volume 0.5: peak %v, want ≈ half of %v", quiet, loud)
 	}
 }
+
+func TestLoadKeepsSpeedAndVolume(t *testing.T) {
+	p := noteWithCC(Event{Status: 0xB0, Data1: 64, Data2: 127})
+	p.SetSpeed(+0.5)
+	p.SetVolume(-0.5)
+	peak(p, 0.05)
+	p.Load(&Song{Duration: 1})
+	s := p.Snapshot()
+	if s.Speed != 1.5 || s.Volume != 0.5 {
+		t.Errorf("speed=%v volume=%v, want 1.5 and 0.5 kept", s.Speed, s.Volume)
+	}
+	if s.Pos != 0 || len(p.voices) != 0 || p.chans[0].sustain {
+		t.Errorf("pos=%v voices=%d sustain=%v, want a fresh start", s.Pos, len(p.voices), p.chans[0].sustain)
+	}
+}

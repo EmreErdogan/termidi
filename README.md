@@ -16,6 +16,8 @@ Supported platforms: macOS and Linux (amd64, arm64).
 
 ```sh
 termidi song.mid
+termidi intro.mid verse.mid   # play several files in order
+termidi ~/midi/               # play every .mid/.midi file in a folder
 ```
 
 While playing, termidi shows a level meter for each channel and a keyboard that lights up the notes being played.
@@ -26,6 +28,7 @@ While playing, termidi shows a level meter for each channel and a keyboard that 
 | `←` / `→` | seek 5 s back / forward |
 | `↑` / `↓` | volume up / down |
 | `+` / `-` | speed up / slow down |
+| `n` / `p` | next / previous song (`p` restarts the current song after 3 s) |
 | `q` | quit |
 
 ## Updating

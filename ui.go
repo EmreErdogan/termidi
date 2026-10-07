@@ -18,7 +18,7 @@ var familyNames = [16]string{
 // screen redraws a multi-line view in place using ANSI cursor movement.
 type screen struct {
 	song     *Song
-	name     string
+	title    string
 	channels []int // channels that play notes, in order
 	lo, hi   int   // note range the song uses
 	meter    [16]float64
@@ -27,10 +27,21 @@ type screen struct {
 	fancy    bool // stdout is a terminal; otherwise print a single status line
 }
 
-func newScreen(song *Song, name string) *screen {
-	s := &screen{song: song, name: name, lo: 127, hi: 0}
+func newScreen() *screen {
+	s := &screen{}
 	s.fancy = term.IsTerminal(int(os.Stdout.Fd()))
 	s.color = s.fancy && os.Getenv("NO_COLOR") == ""
+	if s.fancy {
+		fmt.Print("\x1b[?25l") // hide cursor
+	}
+	return s
+}
+
+// setSong prepares the view for a new song; the next draw replaces the old one.
+func (s *screen) setSong(song *Song, title string) {
+	s.song, s.title = song, title
+	s.channels, s.meter = nil, [16]float64{}
+	s.lo, s.hi = 127, 0
 	var used [16]bool
 	for _, e := range song.Events {
 		if e.Status&0xF0 == 0x90 && e.Data2 > 0 {
@@ -48,10 +59,9 @@ func newScreen(song *Song, name string) *screen {
 	if s.lo > s.hi {
 		s.lo, s.hi = 60, 72
 	}
-	if s.fancy {
-		fmt.Print("\x1b[?25l") // hide cursor
+	if !s.fancy && s.lines > 0 {
+		fmt.Print("\r\n")
 	}
-	return s
 }
 
 func (s *screen) close() {
@@ -84,11 +94,12 @@ func (s *screen) draw(snap Snapshot) {
 	status := fit(progress(snap, s.song.Duration, width), width)
 	if !s.fancy {
 		fmt.Printf("\r%s", status)
+		s.lines = 1
 		return
 	}
 
 	var out []string
-	out = append(out, fit(fmt.Sprintf("♪ %s  (space pause · ←/→ seek · ↑/↓ volume · +/- speed · q quit)", s.name), width))
+	out = append(out, fit("♪ "+s.title, width))
 	meterW := max(0, min(40, width-18))
 	for _, ch := range s.channels {
 		// Meters jump up instantly and fall back smoothly.
@@ -103,6 +114,7 @@ func (s *screen) draw(snap Snapshot) {
 	}
 	out = append(out, s.keyboard(snap, width))
 	out = append(out, status)
+	out = append(out, s.dim(fit("space pause · ←/→ seek · ↑/↓ volume · +/- speed · n/p next/prev · q quit", width)))
 
 	var b strings.Builder
 	if s.lines > 1 {
@@ -115,6 +127,7 @@ func (s *screen) draw(snap Snapshot) {
 		b.WriteString("\r\x1b[2K")
 		b.WriteString(line)
 	}
+	b.WriteString("\x1b[J") // clear leftovers from a taller previous frame
 	fmt.Print(b.String())
 	s.lines = len(out)
 }

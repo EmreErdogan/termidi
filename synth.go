@@ -103,11 +103,24 @@ func (p *Player) SetVolume(delta float64) {
 }
 
 func NewPlayer(s *Song) *Player {
-	p := &Player{song: s, speed: 1, volume: 1}
+	p := &Player{speed: 1, volume: 1}
+	p.load(s)
+	return p
+}
+
+// Load switches to another song, keeping speed and volume.
+func (p *Player) Load(s *Song) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.load(s)
+}
+
+func (p *Player) load(s *Song) {
+	p.song, p.next, p.t, p.voices = s, 0, 0, nil
+	p.Paused, p.Done = false, false
 	for i := range p.chans {
 		p.chans[i] = newChannel()
 	}
-	return p
 }
 
 func (p *Player) Position() float64 {

@@ -129,4 +129,4 @@ func semver(s string) []int {
 	return out
 }
 
-var errUsage = errors.New("usage: " + appName + " <file.mid> | update | version")
+var errUsage = errors.New("usage: " + appName + " <file.mid|dir>... | update | version")
