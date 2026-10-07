@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/ebitengine/oto/v3"
@@ -70,11 +69,11 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 
-	name := filepath.Base(os.Args[1])
-	fmt.Printf("♪ %s  (space: pause, ←/→: seek 5s, q: quit)\r\n", name)
+	scr := newScreen(song, filepath.Base(os.Args[1]))
+	defer scr.close()
 	const seekStep = 5.0
 	esc := 0
-	tick := time.NewTicker(100 * time.Millisecond)
+	tick := time.NewTicker(50 * time.Millisecond)
 	defer tick.Stop()
 	for {
 		select {
@@ -101,39 +100,15 @@ func main() {
 			case ' ':
 				p.TogglePause()
 			case 'q', 'Q', 3:
-				fmt.Print("\r\n")
 				return
 			}
 		case <-sig:
-			fmt.Print("\r\n")
 			return
 		case <-tick.C:
-			draw(p, song.Duration)
+			scr.draw(p.Snapshot())
 			if p.IsDone() {
-				fmt.Print("\r\n")
 				return
 			}
 		}
 	}
-}
-
-func draw(p *Player, dur float64) {
-	pos := p.Position()
-	const w = 30
-	frac := 0.0
-	if dur > 0 {
-		frac = min(pos/dur, 1)
-	}
-	n := int(frac * w)
-	state := "▶"
-	p.mu.Lock()
-	if p.Paused {
-		state = "⏸"
-	}
-	p.mu.Unlock()
-	fmt.Printf("\r%s [%s%s] %s / %s ", state, strings.Repeat("█", n), strings.Repeat("░", w-n), mmss(pos), mmss(dur))
-}
-
-func mmss(s float64) string {
-	return fmt.Sprintf("%02d:%02d", int(s)/60, int(s)%60)
 }

@@ -356,3 +356,36 @@ func (p *Player) Seek(t float64) {
 	p.t = t
 	p.Done = false
 }
+
+// Snapshot is a copy of the player state for the UI.
+type Snapshot struct {
+	Pos     float64
+	Paused  bool
+	Program [16]byte
+	Level   [16]float64 // current loudness per channel, roughly 0..1
+	Note    [128]int8   // channel sounding each note, -1 if none
+}
+
+func (p *Player) Snapshot() Snapshot {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	s := Snapshot{Pos: p.t, Paused: p.Paused}
+	for i := range s.Note {
+		s.Note[i] = -1
+	}
+	for i, c := range p.chans {
+		s.Program[i] = c.program
+	}
+	for _, v := range p.voices {
+		c := p.chans[v.ch]
+		lvl := v.env * v.amp * v.gain * c.volume * c.expression
+		s.Level[v.ch] += lvl
+		if !v.drum && !v.stolen && lvl > 0.01 {
+			s.Note[v.note] = int8(v.ch)
+		}
+	}
+	for i := range s.Level {
+		s.Level[i] = math.Tanh(s.Level[i] * 0.6)
+	}
+	return s
+}
