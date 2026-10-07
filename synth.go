@@ -44,14 +44,18 @@ type channel struct {
 	volume     float64 // CC7
 	expression float64 // CC11
 	pan        float64 // CC10, -1 (left) .. +1 (right)
-	pitch      float64 // semitones
+	pitch      float64 // current bend in semitones (bend × bendRange)
+	bend       float64 // pitch wheel, -1 .. +1
+	bendRange  float64 // semitones, set via RPN 0
+	rpnMSB     byte    // selected RPN (CC101/CC100); 127 = none
+	rpnLSB     byte
 	sustain    bool
 	// Output gains derived from volume, expression and pan.
 	gainL, gainR float64
 }
 
 func newChannel() channel {
-	c := channel{volume: 100.0 / 127, expression: 1}
+	c := channel{volume: 100.0 / 127, expression: 1, bendRange: 2, rpnMSB: 127, rpnLSB: 127}
 	c.updateGain()
 	return c
 }
@@ -144,6 +148,23 @@ func (p *Player) apply(e Event) {
 					}
 				}
 			}
+		case 101:
+			c.rpnMSB = e.Data2
+		case 100:
+			c.rpnLSB = e.Data2
+		case 98, 99: // an NRPN selection deselects the RPN
+			c.rpnMSB, c.rpnLSB = 127, 127
+		case 6, 38: // data entry MSB (semitones) / LSB (cents)
+			if c.rpnMSB == 0 && c.rpnLSB == 0 {
+				semis, cents := math.Trunc(c.bendRange), c.bendRange-math.Trunc(c.bendRange)
+				if e.Data1 == 6 {
+					semis = float64(e.Data2)
+				} else {
+					cents = float64(e.Data2) / 100
+				}
+				c.bendRange = semis + cents
+				p.setPitch(ch)
+			}
 		case 120, 123:
 			for _, v := range p.voices {
 				if v.ch == ch {
@@ -154,12 +175,18 @@ func (p *Player) apply(e Event) {
 	case 0xC0:
 		c.program = e.Data1
 	case 0xE0:
-		bend := int(e.Data2)<<7 | int(e.Data1) - 8192
-		c.pitch = float64(bend) / 8192 * 2
-		for _, v := range p.voices {
-			if v.ch == ch && !v.drum {
-				v.freq = noteFreq(v.note, c.pitch)
-			}
+		c.bend = float64(int(e.Data2)<<7|int(e.Data1)-8192) / 8192
+		p.setPitch(ch)
+	}
+}
+
+// setPitch applies the channel's bend to its sounding notes.
+func (p *Player) setPitch(ch byte) {
+	c := &p.chans[ch]
+	c.pitch = c.bend * c.bendRange
+	for _, v := range p.voices {
+		if v.ch == ch && !v.drum {
+			v.freq = noteFreq(v.note, c.pitch)
 		}
 	}
 }

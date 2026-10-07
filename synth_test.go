@@ -135,3 +135,36 @@ func TestExpressionAndVolumeAffectSoundingNotes(t *testing.T) {
 		}
 	}
 }
+
+func TestPitchBendRange(t *testing.T) {
+	cc := func(n, v byte) Event { return Event{Status: 0xB0, Data1: n, Data2: v} }
+	bendUp := Event{Status: 0xE0, Data1: 0x7F, Data2: 0x7F} // max bend
+
+	p := NewPlayer(&Song{})
+	p.apply(bendUp)
+	if got := p.chans[0].pitch; math.Abs(got-2) > 0.001 {
+		t.Errorf("default range: pitch = %v, want ≈2", got)
+	}
+
+	// RPN 0 = 12 semitones + 50 cents; applied to an already bent channel.
+	for _, e := range []Event{cc(101, 0), cc(100, 0), cc(6, 12), cc(38, 50), cc(101, 127), cc(100, 127)} {
+		p.apply(e)
+	}
+	if got := p.chans[0].pitch; math.Abs(got-12.5) > 0.002 {
+		t.Errorf("RPN 0 range 12.5: pitch = %v, want ≈12.5", got)
+	}
+
+	// Data entry after the RPN null must be ignored.
+	p.apply(cc(6, 1))
+	if got := p.chans[0].bendRange; got != 12.5 {
+		t.Errorf("data entry with no RPN selected changed range to %v", got)
+	}
+
+	// Data entry for another RPN (fine tuning) must not change the range.
+	for _, e := range []Event{cc(101, 0), cc(100, 1), cc(6, 1)} {
+		p.apply(e)
+	}
+	if got := p.chans[0].bendRange; got != 12.5 {
+		t.Errorf("RPN 1 data entry changed range to %v", got)
+	}
+}
