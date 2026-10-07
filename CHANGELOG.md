@@ -4,6 +4,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-07
+
 ### Added
 - Live view: a level meter per channel (with instrument family) and a keyboard that lights up sounding notes in channel colors. Set `NO_COLOR` to disable colors.
 - Master volume (↑/↓) and playback speed (+/-), shown in the status line.
