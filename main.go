@@ -78,7 +78,7 @@ func main() {
 	for {
 		select {
 		case k := <-keys:
-			// Arrow keys arrive as ESC [ C (right) and ESC [ D (left).
+			// Arrow keys arrive as ESC [ A/B/C/D (up/down/right/left).
 			if esc == 2 {
 				esc = 0
 				switch k {
@@ -86,6 +86,10 @@ func main() {
 					p.Seek(p.Position() + seekStep)
 				case 'D':
 					p.Seek(p.Position() - seekStep)
+				case 'A':
+					p.SetVolume(+0.1)
+				case 'B':
+					p.SetVolume(-0.1)
 				}
 				continue
 			}
@@ -99,6 +103,10 @@ func main() {
 				esc = 1
 			case ' ':
 				p.TogglePause()
+			case '+', '=':
+				p.SetSpeed(+0.1)
+			case '-', '_':
+				p.SetSpeed(-0.1)
 			case 'q', 'Q', 3:
 				return
 			}

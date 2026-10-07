@@ -79,10 +79,31 @@ type Player struct {
 	chans  [16]channel
 	Paused bool
 	Done   bool
+	speed  float64 // playback rate, 1 = original tempo
+	volume float64 // master volume, 1 = unity
+}
+
+const (
+	minSpeed, maxSpeed   = 0.25, 3.0
+	minVolume, maxVolume = 0.0, 2.0
+)
+
+// SetSpeed changes the playback rate by delta, clamped to a sane range.
+func (p *Player) SetSpeed(delta float64) {
+	p.mu.Lock()
+	p.speed = math.Round(math.Max(minSpeed, math.Min(maxSpeed, p.speed+delta))*100) / 100
+	p.mu.Unlock()
+}
+
+// SetVolume changes the master volume by delta, clamped to a sane range.
+func (p *Player) SetVolume(delta float64) {
+	p.mu.Lock()
+	p.volume = math.Round(math.Max(minVolume, math.Min(maxVolume, p.volume+delta))*100) / 100
+	p.mu.Unlock()
 }
 
 func NewPlayer(s *Song) *Player {
-	p := &Player{song: s}
+	p := &Player{song: s, speed: 1, volume: 1}
 	for i := range p.chans {
 		p.chans[i] = newChannel()
 	}
@@ -324,14 +345,14 @@ func (p *Player) Read(buf []byte) (int, error) {
 				}
 			}
 			p.voices = alive
-			p.t += 1.0 / sampleRate
+			p.t += p.speed / sampleRate
 			if p.next >= len(p.song.Events) && len(p.voices) == 0 {
 				p.Done = true
 			}
 		}
 		// Soft clip for polyphony.
-		binary.LittleEndian.PutUint32(buf[f*8:], math.Float32bits(float32(math.Tanh(l*0.35))))
-		binary.LittleEndian.PutUint32(buf[f*8+4:], math.Float32bits(float32(math.Tanh(r*0.35))))
+		binary.LittleEndian.PutUint32(buf[f*8:], math.Float32bits(float32(math.Tanh(l*0.35)*p.volume)))
+		binary.LittleEndian.PutUint32(buf[f*8+4:], math.Float32bits(float32(math.Tanh(r*0.35)*p.volume)))
 	}
 	return frames * 8, nil
 }
@@ -361,6 +382,8 @@ func (p *Player) Seek(t float64) {
 type Snapshot struct {
 	Pos     float64
 	Paused  bool
+	Speed   float64
+	Volume  float64
 	Program [16]byte
 	Level   [16]float64 // current loudness per channel, roughly 0..1
 	Note    [128]int8   // channel sounding each note, -1 if none
@@ -369,7 +392,7 @@ type Snapshot struct {
 func (p *Player) Snapshot() Snapshot {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	s := Snapshot{Pos: p.t, Paused: p.Paused}
+	s := Snapshot{Pos: p.t, Paused: p.Paused, Speed: p.speed, Volume: p.volume}
 	for i := range s.Note {
 		s.Note[i] = -1
 	}

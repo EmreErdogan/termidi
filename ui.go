@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"slices"
 	"strings"
@@ -80,14 +81,14 @@ func (s *screen) draw(snap Snapshot) {
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
 		width = w
 	}
-	status := progress(snap, s.song.Duration, width)
+	status := fit(progress(snap, s.song.Duration, width), width)
 	if !s.fancy {
 		fmt.Printf("\r%s", status)
 		return
 	}
 
 	var out []string
-	out = append(out, fit(fmt.Sprintf("♪ %s  (space: pause, ←/→: seek 5s, q: quit)", s.name), width))
+	out = append(out, fit(fmt.Sprintf("♪ %s  (space pause · ←/→ seek · ↑/↓ volume · +/- speed · q quit)", s.name), width))
 	meterW := max(0, min(40, width-18))
 	for _, ch := range s.channels {
 		// Meters jump up instantly and fall back smoothly.
@@ -158,13 +159,14 @@ func progress(snap Snapshot, dur float64, width int) string {
 	if snap.Paused {
 		state = "⏸"
 	}
-	w := max(10, min(50, width-20))
+	w := max(10, min(50, width-40))
 	frac := 0.0
 	if dur > 0 {
 		frac = min(snap.Pos/dur, 1)
 	}
 	n := int(frac * float64(w))
-	return fmt.Sprintf("%s [%s%s] %s / %s", state, strings.Repeat("█", n), strings.Repeat("░", w-n), mmss(snap.Pos), mmss(dur))
+	return fmt.Sprintf("%s [%s%s] %s / %s  vol %d%%  speed %.1f×", state, strings.Repeat("█", n), strings.Repeat("░", w-n),
+		mmss(snap.Pos), mmss(dur), int(math.Round(snap.Volume*100)), snap.Speed)
 }
 
 // fit truncates plain text to width runes.

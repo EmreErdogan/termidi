@@ -168,3 +168,28 @@ func TestPitchBendRange(t *testing.T) {
 		t.Errorf("RPN 1 data entry changed range to %v", got)
 	}
 }
+
+func TestSpeedAndVolume(t *testing.T) {
+	p := NewPlayer(&Song{Duration: 10, Events: []Event{{Time: 10, Status: 0xC0}}}) // keeps playing
+	p.SetSpeed(+0.5)
+	p.Read(make([]byte, 8*sampleRate)) // one second of audio
+	if got := p.Position(); math.Abs(got-1.5) > 0.001 {
+		t.Errorf("position after 1 s at 1.5× = %v, want 1.5", got)
+	}
+	for range 100 {
+		p.SetSpeed(-0.1)
+		p.SetVolume(+0.1)
+	}
+	if s := p.Snapshot(); s.Speed != minSpeed || s.Volume != maxVolume {
+		t.Errorf("speed=%v volume=%v, want clamped to %v and %v", s.Speed, s.Volume, minSpeed, maxVolume)
+	}
+
+	p = noteWithCC()
+	loud, _ := peak(p, 0.05)
+	p.SetVolume(-0.5)
+	p.voices[0].env = 1
+	quiet, _ := peak(p, 0.05)
+	if math.Abs(quiet-loud/2) > loud*0.05 {
+		t.Errorf("volume 0.5: peak %v, want ≈ half of %v", quiet, loud)
+	}
+}

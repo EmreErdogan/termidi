@@ -18,10 +18,14 @@ Supported platforms: macOS and Linux (amd64, arm64).
 termidi song.mid
 ```
 
+While playing, termidi shows a level meter for each channel and a keyboard that lights up the notes being played.
+
 | Key | Action |
 | --- | --- |
 | `space` | pause / resume |
 | `←` / `→` | seek 5 s back / forward |
+| `↑` / `↓` | volume up / down |
+| `+` / `-` | speed up / slow down |
 | `q` | quit |
 
 ## Updating
