@@ -11,6 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - SMPTE time division (files timed in frames instead of beats).
 - Windows support (amd64, arm64) with a PowerShell installer; `update` works on Windows too.
 
+### Fixed
+- The end of the last song is no longer cut off on exit.
+- Song changes, seeking, pause and volume/speed keys take effect immediately instead of after ~0.5 s of already-queued audio.
+
 ## [0.3.0] - 2026-10-07
 
 ### Added

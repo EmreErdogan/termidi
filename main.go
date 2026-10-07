@@ -12,6 +12,18 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	deviceBuffer = 50 * time.Millisecond // audio device buffer
+	playerBuffer = 50 * time.Millisecond // samples queued ahead of the device
+)
+
+// drain waits until everything rendered so far has been played. The player
+// keeps pulling (silent) samples, so wait out the queue length instead of
+// polling for an empty buffer.
+func drain() {
+	time.Sleep(playerBuffer + deviceBuffer + 50*time.Millisecond)
+}
+
 func main() {
 	cleanupOldBinary()
 	if len(os.Args) < 2 {
@@ -54,7 +66,7 @@ func main() {
 		SampleRate:   sampleRate,
 		ChannelCount: 2,
 		Format:       oto.FormatFloat32LE,
-		BufferSize:   50 * time.Millisecond,
+		BufferSize:   deviceBuffer,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "cannot open audio device:", err)
@@ -68,6 +80,10 @@ func main() {
 	// Keep a live reference: oto closes players via a finalizer once they are
 	// garbage collected, which silently stops playback.
 	defer out.Close()
+	// The synth reacts to keys and song changes in real time, so keep the
+	// player's queue short (oto defaults to 0.5 s, which delays every change
+	// and cuts off the end of the last song when we exit).
+	out.SetBufferSize(int(playerBuffer.Seconds()*sampleRate) * 8)
 	out.Play()
 
 	// Raw terminal so single keypresses work (space = pause, q = quit).
@@ -155,6 +171,7 @@ func main() {
 			scr.draw(p.Snapshot())
 			if p.IsDone() {
 				if cur+1 == len(songs) {
+					drain()
 					return
 				}
 				play(cur + 1)
