@@ -16,6 +16,7 @@ type voice struct {
 	amp      float64
 	env      float64
 	released bool
+	held     bool // note-off arrived while the sustain pedal was down
 	drum     bool
 	wave     int
 	age      float64
@@ -25,6 +26,7 @@ type channel struct {
 	program byte
 	volume  float64
 	pitch   float64 // semitones
+	sustain bool
 }
 
 // Player is an io.Reader that renders the song as float32 stereo PCM.
@@ -77,14 +79,28 @@ func (p *Player) apply(e Event) {
 		fallthrough
 	case 0x80:
 		for _, v := range p.voices {
-			if v.ch == ch && v.note == e.Data1 && !v.drum {
-				v.released = true
+			if v.ch == ch && v.note == e.Data1 && !v.drum && !v.released {
+				if c.sustain {
+					v.held = true
+				} else {
+					v.released = true
+				}
 			}
 		}
 	case 0xB0:
 		switch e.Data1 {
 		case 7:
 			c.volume = float64(e.Data2) / 127
+		case 64:
+			c.sustain = e.Data2 >= 64
+			if !c.sustain {
+				for _, v := range p.voices {
+					if v.ch == ch && v.held {
+						v.released = true
+						v.held = false
+					}
+				}
+			}
 		case 120, 123:
 			for _, v := range p.voices {
 				if v.ch == ch {
